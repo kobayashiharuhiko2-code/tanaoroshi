@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="棚卸">
+    <meta name="theme-color" content="#1e40af">
+    <link rel="manifest" href="./manifest.json">
+    <link rel="apple-touch-icon" href="./icons/icon-192.png">
+    <title>清和産業 スマート棚卸 v30</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+        .no-select { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+        body { overscroll-behavior-y: none; }
+        @keyframes popIn { 0% { transform: scale(0.9); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        .animate-pop { animation: popIn 0.2s ease-out forwards; }
+        @keyframes pulseRing { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 20px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+        .pulse-ring { animation: pulseRing 1s infinite; }
+        @keyframes slideUp { 0% { transform: translateY(100%); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+        .slide-up { animation: slideUp 0.3s ease-out forwards; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
+
+        // --- アイコン ---
+        const IconBase = ({ children, className, ...props }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>{children}</svg>);
+        const Mic = (p) => <IconBase {...p}><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></IconBase>;
+        const Save = (p) => <IconBase {...p}><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></IconBase>;
+        const Trash2 = (p) => <IconBase {...p}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></IconBase>;
+        const History = (p) => <IconBase {...p}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 12"/><path d="M3 3v9h9"/><path d="M12 7v5l4 2"/></IconBase>;
+        const RotateCcw = (p) => <IconBase {...p}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 12"/><path d="M3 3v9h9"/></IconBase>;
+        const RotateCw = (p) => <IconBase {...p}><path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 12"/><path d="M21 3v9h-9"/></IconBase>;
+        const MapPin = (p) => <IconBase {...p}><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></IconBase>;
+        const ChevronDown = (p) => <IconBase {...p}><path d="m6 9 6 6 6-6"/></IconBase>;
+        const AlertTriangle = (p) => <IconBase {...p}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></IconBase>;
+        const CheckCircle = (p) => <IconBase {...p}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></IconBase>;
+        const Database = (p) => <IconBase {...p}><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></IconBase>;
+        const Cloud = (p) => <IconBase {...p}><path d="M17.5 19H9.5A7.5 7.5 0 0 1 9.5 4c1.82 0 3.48.65 4.78 1.74A5.5 5.5 0 0 1 24 10.5a5.5 5.5 0 0 1-5.5 5.5"/></IconBase>;
+        const Layers = (p) => <IconBase {...p}><polygon points="12 2 2 7 12 12 22 7 12 2" /><polyline points="2 17 12 22 22 17" /><polyline points="2 12 12 17 22 12" /></IconBase>;
+        const Box = (p) => <IconBase {...p}><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" x2="12" y1="22.08" y2="12"/></IconBase>;
+        const X = (p) => <IconBase {...p}><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></IconBase>;
+        const Delete = (p) => <IconBase {...p}><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/></IconBase>;
+        const Settings = (p) => <IconBase {...p}><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></IconBase>;
+
+        // Sound Class
+        class SoundEffect {
+            constructor() { this.ctx = null; }
+            init() { if (!this.ctx) { try { const AC = window.AudioContext || window.webkitAudioContext; if (AC) this.ctx = new AC(); } catch(e) {} } }
+            playTone(type, freq, dur) { try { this.init(); if (!this.ctx) return; if(this.ctx.state === 'suspended') this.ctx.resume().catch(()=>{}); const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain(); osc.connect(gain); gain.connect(this.ctx.destination); osc.type = type; osc.frequency.setValueAtTime(freq, this.ctx.currentTime); gain.gain.setValueAtTime(0.12, this.ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + dur); osc.start(); osc.stop(this.ctx.currentTime + dur); } catch(e) {} }
+            playOk() { this.playTone('sine', 880, 0.3); }
+            playStep() { this.playTone('sine', 600, 0.15); }
+            playNg() { try { this.init(); if(!this.ctx) return; if(this.ctx.state==='suspended') this.ctx.resume().catch(()=>{}); const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain(); osc.connect(gain); gain.connect(this.ctx.destination); osc.type = 'square'; osc.frequency.setValueAtTime(100, this.ctx.currentTime); gain.gain.setValueAtTime(0.15, this.ctx.currentTime); gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.2); osc.start(); osc.stop(this.ctx.currentTime + 0.2); } catch(e) {} }
+            playAsk() { this.playTone('triangle', 440, 0.15); setTimeout(() => this.playTone('triangle', 550, 0.15), 180); }
+        }
+        const soundEffect = new SoundEffect();
+
+        // ===== 山/個 判定の強化パターン =====
+        const PILE_PATTERNS = [
+            /(\d+\.?\d*)\s*山/i,
+            /(\d+\.?\d*)\s*やま/i,
+            /(\d+\.?\d*)\s*ヤマ/i,
+            /(\d+\.?\d*)\s*段/i,
+            /(\d+\.?\d*)\s*だん/i,
+            /(\d+\.?\d*)\s*ダン/i,
+            /(\d+\.?\d*)\s*パレット/i,
+            /(\d+\.?\d*)\s*ぱれっと/i,
+            /(\d+\.?\d*)\s*セット/i,
+            /(\d+\.?\d*)\s*せっと/i,
+            /(\d+\.?\d*)\s*箱/i,
+            /(\d+\.?\d*)\s*はこ/i,
+            /(\d+\.?\d*)\s*ハコ/i,
+            /(\d+\.?\d*)\s*ケース/i,
+            /(\d+\.?\d*)\s*入/i,
+        ];
+
+        const PIECE_PATTERNS = [
+            /(\d+\.?\d*)\s*個/i,
+            /(\d+\.?\d*)\s*こ(?![ー])/i,   // 「こ」だが「コード」等を避ける
+            /(\d+\.?\d*)\s*コ(?![ー])/i,
+            /(\d+\.?\d*)\s*本/i,
+            /(\d+\.?\d*)\s*ほん/i,
+            /(\d+\.?\d*)\s*枚/i,
+            /(\d+\.?\d*)\s*まい/i,
+            /(\d+\.?\d*)\s*バラ/i,
+            /(\d+\.?\d*)\s*ばら/i,
+            /(\d+\.?\d*)\s*ピース/i,
+        ];
+
+        // 音声テキストから数量と単位を抽出する関数
+        function extractQtyAndUnit(text) {
+            if (!text) return { qty: null, unit: null, raw: text };
+
+            // 全角→半角変換
+            let s = text.replace(/[０-９]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0));
+            s = s.replace(/．/g, '.');
+
+            // 漢数字→アラビア数字
+            const kanjiMap = { '一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,'十':10,'零':0 };
+            // 「二十四」→「24」のような変換
+            s = s.replace(/([一二三四五六七八九])?十([一二三四五六七八九])?/g, (_, tens, ones) => {
+                const t = tens ? kanjiMap[tens] : 1;
+                const o = ones ? kanjiMap[ones] : 0;
+                return String(t * 10 + o);
+            });
+            Object.keys(kanjiMap).forEach(k => { s = s.replace(new RegExp(k, 'g'), kanjiMap[k]); });
+
+            // カタカナ読み→数字
+            const kataMap = {'イチ':'1','ニ':'2','サン':'3','ヨン':'4','シ':'4','ゴ':'5','ロク':'6','ナナ':'7','シチ':'7','ハチ':'8','キュウ':'9','ク':'9','ジュウ':'10','ゼロ':'0','マル':'0'};
+            // 長い順にマッチさせる
+            Object.keys(kataMap).sort((a,b) => b.length - a.length).forEach(k => {
+                s = s.replace(new RegExp(k, 'g'), kataMap[k]);
+            });
+
+            // 「テン」「ポイント」→「.」
+            s = s.replace(/テン|てん|ポイント|ぽいんと/g, '.');
+
+            // 山パターンチェック
+            for (const pat of PILE_PATTERNS) {
+                const m = s.match(pat);
+                if (m) return { qty: parseFloat(m[1]), unit: 'pile', raw: text };
+            }
+
+            // 個パターンチェック
+            for (const pat of PIECE_PATTERNS) {
+                const m = s.match(pat);
+                if (m) return { qty: parseFloat(m[1]), unit: 'piece', raw: text };
+            }
+
+            // 単位なし：数字だけ抽出
+            const numMatch = s.match(/(\d+\.?\d*)/);
+            if (numMatch) {
+                return { qty: parseFloat(numMatch[1]), unit: null, raw: text };
+            }
+
+            return { qty: null, unit: null, raw: text };
+        }
+
+        // ===== 容器コード認識の強化 =====
+        function normalizeForCode(text) {
+            let s = text;
+            // 全角→半角
+            s = s.replace(/[Ａ-Ｚａ-ｚ０-９]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0));
+
+            // カタカナ読み→アルファベット / 数字
+            const codeMap = {
+                'アールブイ':'RV', 'アールヴイ':'RV', 'アール':'R',
+                'ブイ':'V', 'ヴイ':'V', 'ビー':'B',
+                'エイチ':'H', 'エッチ':'H',
+                'ティー':'T', 'ピー':'P', 'エム':'M', 'エル':'L', 'ケー':'K',
+                'ワイ':'Y', 'ダブリュー':'W', 'ゼット':'Z', 'ジェイ':'J',
+                'ユー':'U', 'エフ':'F', 'オー':'O', 'キュー':'Q',
+                'エス':'S', 'ジー':'G', 'シー':'C', 'ディー':'D',
+                'イー':'E', 'エックス':'X', 'アイ':'I', 'エヌ':'N', 'エー':'A',
+                'ハチ':'8', 'ナナ':'7', 'ロク':'6', 'ゴ':'5', 'ヨン':'4',
+                'サン':'3', 'ニ':'2', 'イチ':'1', 'ゼロ':'0', 'キュウ':'9',
+            };
+            // 長い順にマッチ
+            Object.keys(codeMap).sort((a,b) => b.length - a.length).forEach(k => {
+                s = s.replace(new RegExp(k, 'g'), codeMap[k]);
+            });
+
+            return s.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        }
+
+        function findContainerCode(text, masterData) {
+            if (!text || text.trim() === '') return null;
+
+            const target = normalizeForCode(text);
+            const masterKeys = Object.keys(masterData).filter(k => k && k.trim().length > 0);
+
+            // 完全一致
+            for (const key of masterKeys) {
+                const pKey = key.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                if (pKey === target) return key;
+            }
+
+            // R省略対応 (例: "V8" → "RV8")
+            for (const key of masterKeys) {
+                const pKey = key.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                if (pKey.startsWith('R') && pKey.substring(1) === target) return key;
+            }
+
+            // エイリアスチェック
+            for (const key of masterKeys) {
+                const aliases = masterData[key].aliases || [];
+                for (const alias of aliases) {
+                    const normAlias = normalizeForCode(alias);
+                    if (normAlias === target) return key;
+                    if (text.includes(alias)) return key;
+                }
+            }
+
+            // 部分一致（最低2文字以上）
+            if (target.length >= 2) {
+                for (const key of masterKeys) {
+                    const pKey = key.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                    if (pKey.includes(target) || target.includes(pKey)) return key;
+                    if (pKey.startsWith('R')) {
+                        const noR = pKey.substring(1);
+                        if (noR.length > 0 && (noR.includes(target) || target.includes(noR))) return key;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        // ===== メインApp =====
+        function App() {
+            const [activeTab, setActiveTab] = useState('input');
+            const [items, setItems] = useState([]);
+            const [history, setHistory] = useState([]);
+            const [future, setFuture] = useState([]);
+            const [masterData, setMasterData] = useState({
+                'RV8': { unitCount: 20, aliases: [] },
+                'R7H': { unitCount: 16, aliases: [] },
+                'TP3': { unitCount: 10, aliases: [] }
+            });
+            const [areaList, setAreaList] = useState(['エリア1', 'エリア2']);
+            const [currentArea, setCurrentArea] = useState('エリア1');
+            const [isListening, setIsListening] = useState(false);
+            const [transcript, setTranscript] = useState('');
+            const [feedbackMessage, setFeedbackMessage] = useState('');
+            const [feedbackType, setFeedbackType] = useState('info');
+            const [manualMode, setManualMode] = useState(false);
+            const [isLoaded, setIsLoaded] = useState(false);
+            const [showAreaSelect, setShowAreaSelect] = useState(false);
+            const [unsavedChanges, setUnsavedChanges] = useState(false);
+            const [inputStep, setInputStep] = useState('code');
+            const [pendingCode, setPendingCode] = useState(null);
+            const [debugText, setDebugText] = useState('');
+            const [manualQty, setManualQty] = useState('');
+
+            // ★ 新機能: 単位確認ダイアログ
+            const [showUnitDialog, setShowUnitDialog] = useState(false);
+            const [pendingQty, setPendingQty] = useState(null);
+            const [pendingRawText, setPendingRawText] = useState('');
+
+            const transcriptRef = useRef('');
+            const recognitionRef = useRef(null);
+            const isListeningRef = useRef(false);
+
+            // localStorage読み込み
+            useEffect(() => {
+                try {
+                    const savedMaster = localStorage.getItem('inventory_masterData_v30');
+                    const savedAreaList = localStorage.getItem('inventory_areaList_v30');
+                    const savedItems = localStorage.getItem('inventory_items_v30');
+                    if (savedMaster) setMasterData(JSON.parse(savedMaster));
+                    if (savedAreaList) {
+                        const parsed = JSON.parse(savedAreaList);
+                        setAreaList(parsed);
+                        if (parsed.length > 0) setCurrentArea(parsed[0]);
+                    }
+                    if (savedItems) setItems(JSON.parse(savedItems));
+                } catch (e) { console.error(e); } finally { setIsLoaded(true); }
+            }, []);
+
+            useEffect(() => { if (isLoaded) localStorage.setItem('inventory_masterData_v30', JSON.stringify(masterData)); }, [masterData, isLoaded]);
+            useEffect(() => { if (isLoaded) localStorage.setItem('inventory_areaList_v30', JSON.stringify(areaList)); }, [areaList, isLoaded]);
+            useEffect(() => { if (isLoaded) localStorage.setItem('inventory_items_v30', JSON.stringify(items)); }, [items, isLoaded]);
+
+            // Web Speech API 初期化
+            useEffect(() => {
+                const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (SR) {
+                    const rec = new SR();
+                    rec.continuous = false;       // ★ 1発認識で高速化
+                    rec.interimResults = true;
+                    rec.lang = 'ja-JP';
+                    rec.maxAlternatives = 3;       // ★ 複数候補を取得
+                    rec.onresult = (event) => {
+                        let final = '';
+                        let interim = '';
+                        for (let i = event.resultIndex; i < event.results.length; ++i) {
+                            if (event.results[i].isFinal) {
+                                final += event.results[i][0].transcript;
+                            } else {
+                                interim += event.results[i][0].transcript;
+                            }
+                        }
+                        const resultText = final || interim;
+                        setTranscript(resultText);
+                        transcriptRef.current = resultText;
+                    };
+                    rec.onerror = (e) => {
+                        console.error('Speech error:', e.error);
+                        if (e.error !== 'aborted') {
+                            setIsListening(false);
+                            isListeningRef.current = false;
+                        }
+                    };
+                    rec.onend = () => {
+                        // continuous=false なので自動で止まる
+                        if (isListeningRef.current) {
+                            setIsListening(false);
+                            isListeningRef.current = false;
+                            const finalText = transcriptRef.current;
+                            if (finalText) {
+                                // inputStep をrefで取得するため、直接参照
+                                setTimeout(() => {
+                                    processVoiceResult(finalText);
+                                }, 100);
+                            }
+                        }
+                    };
+                    recognitionRef.current = rec;
+                }
+            }, []);
+
+            // inputStepをrefで追跡（onend内で使うため）
+            const inputStepRef = useRef('code');
+            useEffect(() => { inputStepRef.current = inputStep; }, [inputStep]);
+            const pendingCodeRef = useRef(null);
+            useEffect(() => { pendingCodeRef.current = pendingCode; }, [pendingCode]);
+
+            const processVoiceResult = useCallback((text) => {
+                if (inputStepRef.current === 'code') {
+                    parseCodeInput(text);
+                } else {
+                    parseQtyInput(text);
+                }
+            }, []);
+
+            const startListening = () => {
+                if (recognitionRef.current && !isListeningRef.current) {
+                    setTranscript('');
+                    transcriptRef.current = '';
+                    setFeedbackMessage('');
+                    try {
+                        recognitionRef.current.start();
+                        setIsListening(true);
+                        isListeningRef.current = true;
+                    } catch(e) {
+                        console.error('Start failed:', e);
+                    }
+                }
+            };
+
+            const stopListening = () => {
+                if (recognitionRef.current && isListeningRef.current) {
+                    try {
+                        recognitionRef.current.stop();
+                    } catch(e) {}
+                    // onend で処理される
+                }
+            };
+
+            const getCurrentSeq = () => items.filter(i => i.area === currentArea).length + 1;
+
+            // ===== コード認識 =====
+            const parseCodeInput = (text) => {
+                if (!text || text.trim() === '') return;
+                setDebugText(`認識: "${text}"`);
+
+                const code = findContainerCode(text, masterData);
+                if (code) {
+                    setPendingCode(code);
+                    setInputStep('qty');
+                    setFeedbackType('info');
+                    setFeedbackMessage(`✓ ${code} → 次に数量を話してください`);
+                    soundEffect.playStep();
+                } else {
+                    setFeedbackType('error');
+                    setFeedbackMessage(`✗ 「${text}」→ 該当コードなし`);
+                    soundEffect.playNg();
+                }
+                setTranscript('');
+            };
+
+            // ===== 数量認識（山/個 自動判定 + 確認ダイアログ） =====
+            const parseQtyInput = (text) => {
+                if (!text || text.trim() === '') return;
+                setDebugText(`数量認識: "${text}"`);
+
+                const result = extractQtyAndUnit(text);
+
+                if (result.qty === null || result.qty <= 0) {
+                    setFeedbackType('error');
+                    setFeedbackMessage(`✗ 数量不明: 「${text}」`);
+                    soundEffect.playNg();
+                    setTranscript('');
+                    return;
+                }
+
+                if (result.unit === 'pile') {
+                    // 「山」が明確 → 即登録
+                    registerItem(result.qty, true, text);
+                } else if (result.unit === 'piece') {
+                    // 「個」が明確 → 即登録
+                    registerItem(result.qty, false, text);
+                } else {
+                    // ★ 単位不明 → 確認ダイアログ
+                    setPendingQty(result.qty);
+                    setPendingRawText(text);
+                    setShowUnitDialog(true);
+                    soundEffect.playAsk();
+                }
+                setTranscript('');
+            };
+
+            // ===== 登録処理 =====
+            const registerItem = (qty, isPile, sourceText = '') => {
+                const code = pendingCodeRef.current || pendingCode;
+                let totalCount = qty;
+                let unitSize = 1;
+                if (masterData[code]) {
+                    unitSize = masterData[code].unitCount;
+                    if (isPile) {
+                        totalCount = Math.round(qty * unitSize * 100) / 100;
+                    }
+                }
+                addItem(code, qty, totalCount, isPile, unitSize);
+                setFeedbackType('success');
+                const unitLabel = isPile ? `山(×${unitSize})= ${totalCount}` : '個';
+                setFeedbackMessage(`✓ No.${getCurrentSeq()}: ${code} ${qty}${unitLabel} 登録完了`);
+                soundEffect.playOk();
+                resetStep();
+            };
+
+            // 単位確認ダイアログで選択
+            const handleUnitSelect = (unit) => {
+                setShowUnitDialog(false);
+                registerItem(pendingQty, unit === 'pile', pendingRawText);
+            };
+
+            const resetStep = () => {
+                setPendingCode(null);
+                setInputStep('code');
+                setTranscript('');
+                setManualQty('');
+                setPendingQty(null);
+                setPendingRawText('');
+            };
+
+            const handleManualSelect = (code) => {
+                soundEffect.playStep();
+                setPendingCode(code);
+                setInputStep('qty');
+                setFeedbackMessage(`✓ ${code} → 数量を入力`);
+                setTranscript('');
+            };
+
+            // テンキー
+            const handleTenkeyInput = (num) => {
+                setManualQty(prev => {
+                    if (num === '.' && prev.includes('.')) return prev;
+                    const val = prev + num.toString();
+                    if (val.length > 6) return prev;
+                    return val;
+                });
+            };
+            const handleTenkeyDelete = () => setManualQty(prev => prev.slice(0, -1));
+            const handleTenkeyEnterPile = () => {
+                const qty = parseFloat(manualQty);
+                if (qty > 0) registerItem(qty, true);
+            };
+            const handleTenkeyEnterPiece = () => {
+                const qty = parseFloat(manualQty);
+                if (qty > 0) registerItem(qty, false);
+            };
+
+            // アイテム管理
+            const addItem = (code, inputQty, total, isPile, unitSize) => {
+                const newItem = {
+                    id: Date.now(),
+                    area: currentArea,
+                    seq: getCurrentSeq(),
+                    code, inputQty, isPile, unitSize, total,
+                    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                };
+                setItems(prev => [newItem, ...prev]);
+                setHistory(prev => [...prev, { type: 'add', item: newItem, index: 0 }]);
+                setFuture([]);
+                setUnsavedChanges(true);
+            };
+
+            const removeItem = (id) => {
+                const index = items.findIndex(i => i.id === id);
+                if (index === -1) return;
+                const target = items[index];
+                const newItems = [...items];
+                newItems.splice(index, 1);
+                setItems(newItems);
+                setHistory(prev => [...prev, { type: 'delete', item: target, index }]);
+                setFuture([]);
+                setUnsavedChanges(true);
+            };
+
+            const undoLastAction = () => {
+                if (history.length === 0) return;
+                const lastAction = history[history.length - 1];
+                setHistory(prev => prev.slice(0, -1));
+                if (lastAction.type === 'add') {
+                    setItems(prev => prev.filter(i => i.id !== lastAction.item.id));
+                } else if (lastAction.type === 'delete') {
+                    setItems(prev => {
+                        const restored = [...prev];
+                        const idx = Math.min(lastAction.index, restored.length);
+                        restored.splice(idx, 0, lastAction.item);
+                        return restored;
+                    });
+                }
+                setFuture(prev => [...prev, lastAction]);
+                setUnsavedChanges(true);
+            };
+
+            const redoLastAction = () => {
+                if (future.length === 0) return;
+                const nextAction = future[future.length - 1];
+                setFuture(prev => prev.slice(0, -1));
+                if (nextAction.type === 'add') {
+                    setItems(prev => {
+                        const restored = [...prev];
+                        const idx = Math.min(nextAction.index, restored.length);
+                        restored.splice(idx, 0, nextAction.item);
+                        return restored;
+                    });
+                } else if (nextAction.type === 'delete') {
+                    setItems(prev => prev.filter(i => i.id !== nextAction.item.id));
+                }
+                setHistory(prev => [...prev, nextAction]);
+                setUnsavedChanges(true);
+            };
+
+            const clearAllData = () => { if (window.confirm("このエリアの全データを消去しますか？")) { setItems(prev => prev.filter(i => i.area !== currentArea)); setHistory([]); setFuture([]); setUnsavedChanges(false); } };
+
+            // CSV出力
+            const downloadCSV = (content, filename) => {
+                const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), content], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', filename);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
+
+            const exportCurrentAreaCSV = () => {
+                const targetItems = items.filter(i => i.area === currentArea);
+                if (targetItems.length === 0) { alert("データなし"); return; }
+                const header = "エリア名,行No,コード,入力数,単位,1単位数,合計数量,時刻\n";
+                const rows = targetItems.sort((a,b) => a.seq - b.seq).map(item =>
+                    `${item.area},${item.seq},${item.code},${item.inputQty},${item.isPile ? '山' : '個'},${item.unitSize},${item.total},${item.timestamp}`
+                ).join("\n");
+                const now = new Date();
+                const d = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}_${now.getHours().toString().padStart(2,'0')}${now.getMinutes().toString().padStart(2,'0')}`;
+                downloadCSV(header + rows, `棚卸_${currentArea}_${d}.csv`);
+                setUnsavedChanges(false);
+            };
+
+            // マスタCSV読込
+            const handleAreaUpload = (e) => {
+                const f = e.target.files[0]; if (!f) return;
+                const r = new FileReader();
+                r.onload = (ev) => {
+                    const lines = ev.target.result.split(/\r\n|\n/);
+                    const arr = [];
+                    lines.forEach(l => {
+                        const cl = l.replace(/[\x00-\x1F\x7F]/g, "").trim();
+                        if (!cl) return;
+                        const p = cl.split(',');
+                        let n = (p.length >= 2 && p[1].trim()) ? p[1].trim() : p[0].trim();
+                        if (n && n.length > 0 && !cl.includes('番号') && !cl.includes('保管場所') && !arr.includes(n)) {
+                            arr.push(n);
+                        }
+                    });
+                    if (arr.length) { setAreaList(arr); setCurrentArea(arr[0]); alert(`エリア更新: ${arr.length}件`); }
+                };
+                r.readAsText(f, 'Shift_JIS');
+            };
+
+            const handleMasterUpload = (e) => {
+                const f = e.target.files[0]; if (!f) return;
+                const r = new FileReader();
+                r.onload = (ev) => {
+                    const lines = ev.target.result.split(/\r\n|\n/);
+                    const m = {};
+                    lines.forEach(l => {
+                        const cl = l.replace(/[\x00-\x1F\x7F]/g, "").trim();
+                        if (!cl) return;
+                        const p = cl.split(',');
+                        if (p.length >= 1) {
+                            const c = p[0].trim();
+                            if (!c || c.length === 0) return;
+                            let q = parseInt(p[1]);
+                            if (isNaN(q)) q = 1;
+                            const aliases = [];
+                            for (let i = 2; i < p.length; i++) {
+                                if (p[i] && p[i].trim()) aliases.push(p[i].trim());
+                            }
+                            if (c && !cl.includes('容器名') && !cl.includes('段数')) {
+                                m[c] = { unitCount: q, aliases };
+                            }
+                        }
+                    });
+                    setMasterData(m);
+                    alert(`マスタ更新完了: ${Object.keys(m).length}件`);
+                };
+                r.readAsText(f, 'Shift_JIS');
+            };
+
+            const currentContextItems = items.filter(i => i.area === currentArea);
+
+            if (!isLoaded) return <div className="p-4 text-white text-center">読み込み中...</div>;
+
+            return (
+                <div className="pb-24 max-w-md mx-auto min-h-screen bg-slate-900">
+                    {/* ヘッダー */}
+                    <div className="bg-slate-800 p-3 shadow-md sticky top-0 z-20 border-b border-slate-700 flex justify-between items-center">
+                        <h1 className="text-base font-bold text-blue-400">棚卸 v30</h1>
+                        <div className="bg-slate-700 rounded-lg flex">
+                            <button onClick={() => setActiveTab('input')} className={`px-4 py-2 text-sm rounded-lg font-bold ${activeTab === 'input' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}>入力</button>
+                            <button onClick={() => setActiveTab('settings')} className={`px-4 py-2 text-sm rounded-lg font-bold ${activeTab === 'settings' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}>設定</button>
+                        </div>
+                    </div>
+
+                    {/* エリア選択 */}
+                    <div className="px-3 pt-3 relative">
+                        <button onClick={() => setShowAreaSelect(!showAreaSelect)} className="w-full bg-slate-800 p-3 rounded-lg border border-slate-600 flex justify-between items-center">
+                            <div className="flex items-center gap-2"><MapPin className="w-5 h-5 text-green-400" /><span className="font-bold text-lg text-white">{currentArea}</span></div>
+                            <ChevronDown className="w-5 h-5 text-slate-400" />
+                        </button>
+                        {showAreaSelect && (
+                            <div className="absolute top-14 left-3 right-3 bg-slate-800 border border-slate-600 rounded-lg shadow-xl z-50 max-h-64 overflow-y-auto">
+                                {areaList.map(a => <button key={a} onClick={() => { setCurrentArea(a); setShowAreaSelect(false); }} className={`w-full text-left p-4 border-b border-slate-700 text-lg ${a === currentArea ? 'bg-blue-900/30 text-blue-300 font-bold' : 'text-slate-200'}`}>{a}</button>)}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="p-3 space-y-3">
+                        {activeTab === 'input' && (
+                            <>
+                                {/* ステップ表示 */}
+                                <div className="flex items-center justify-center gap-4">
+                                    <div className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${inputStep === 'code' ? 'bg-blue-600 text-white scale-110 shadow-lg shadow-blue-600/30' : 'bg-slate-700 text-slate-500'}`}>
+                                        ① コード
+                                    </div>
+                                    <div className="text-slate-600 text-xl">▶</div>
+                                    <div className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${inputStep === 'qty' ? 'bg-green-600 text-white scale-110 shadow-lg shadow-green-600/30' : 'bg-slate-700 text-slate-500'}`}>
+                                        ② 数量
+                                    </div>
+                                </div>
+
+                                {/* ステータスバー */}
+                                <div className={`px-3 py-2 rounded-lg border flex justify-between items-center ${unsavedChanges ? 'bg-yellow-900/20 border-yellow-600' : 'bg-green-900/20 border-green-600'}`}>
+                                    <div className="flex items-center gap-2 text-sm">
+                                        {unsavedChanges ? <AlertTriangle className="w-4 h-4 text-yellow-500" /> : <CheckCircle className="w-4 h-4 text-green-500" />}
+                                        <span className={unsavedChanges ? 'text-yellow-400' : 'text-green-400'}>{unsavedChanges ? '未保存' : '保存済'} ({currentContextItems.length}件)</span>
+                                    </div>
+                                    <button onClick={exportCurrentAreaCSV} className="bg-slate-700 px-4 py-2 rounded-lg text-sm flex items-center gap-1 hover:bg-slate-600 active:bg-slate-500 font-bold">
+                                        <Save className="w-4 h-4" />CSV保存
+                                    </button>
+                                </div>
+
+                                {/* メイン入力エリア */}
+                                <div className={`p-5 rounded-2xl shadow-inner border text-center relative transition-colors duration-300 ${inputStep === 'code' ? 'bg-gradient-to-b from-slate-800 to-blue-900/20 border-blue-500/50' : 'bg-gradient-to-b from-slate-800 to-green-900/20 border-green-500/50'}`}>
+
+                                    {/* 選択中コード表示 */}
+                                    {inputStep === 'qty' && (
+                                        <div className="mb-4 animate-pop">
+                                            <div className="bg-slate-900/80 p-3 rounded-lg border-2 border-blue-500 text-blue-300 font-mono text-2xl font-bold">
+                                                {pendingCode}
+                                                <span className="text-sm text-slate-400 ml-2">
+                                                    (1山={masterData[pendingCode]?.unitCount || '?'}個)
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* 認識テキスト表示 */}
+                                    <div className="h-16 flex items-center justify-center mb-3">
+                                        {transcript ? (
+                                            <p className="text-2xl font-bold text-white animate-pulse">{transcript}</p>
+                                        ) : (
+                                            <div className="flex flex-col items-center">
+                                                <p className={`text-lg font-bold ${inputStep === 'code' ? 'text-blue-400' : 'text-green-400'}`}>
+                                                    {inputStep === 'code' ? '容器コードを話す' : '「○○山」または「○○個」'}
+                                                </p>
+                                                {feedbackMessage && (
+                                                    <p className={`text-sm mt-2 font-bold ${feedbackType === 'error' ? 'text-red-400' : feedbackType === 'success' ? 'text-green-400' : 'text-blue-400'}`}>
+                                                        {feedbackMessage}
+                                                    </p>
+                                                )}
+                                                {debugText && <p className="text-[10px] text-slate-600 mt-1 font-mono">{debugText}</p>}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* 音声/手動モード */}
+                                    {!manualMode ? (
+                                        <div className="relative">
+                                            {/* マイクボタン */}
+                                            <button
+                                                onMouseDown={startListening} onMouseUp={stopListening}
+                                                onTouchStart={(e) => { e.preventDefault(); startListening(); }}
+                                                onTouchEnd={(e) => { e.preventDefault(); stopListening(); }}
+                                                onMouseLeave={() => { if (isListening) stopListening(); }}
+                                                className={`w-28 h-28 rounded-full flex items-center justify-center mx-auto transition-all shadow-xl no-select ${
+                                                    isListening
+                                                        ? 'bg-red-500 scale-110 pulse-ring'
+                                                        : inputStep === 'code'
+                                                            ? 'bg-blue-600 ring-4 ring-blue-600/20 active:scale-95'
+                                                            : 'bg-green-600 ring-4 ring-green-600/20 active:scale-95'
+                                                }`}
+                                            >
+                                                <Mic className="w-12 h-12 text-white" />
+                                            </button>
+                                            <p className="text-xs text-slate-500 mt-2">
+                                                {isListening ? '話してください...' : '長押しで録音'}
+                                            </p>
+
+                                            {/* Undo / Redo */}
+                                            {inputStep === 'code' && (
+                                                <>
+                                                    <button onClick={undoLastAction} disabled={history.length === 0} className="absolute right-2 bottom-0 bg-slate-700 p-3 rounded-full disabled:opacity-30 hover:bg-slate-600 transition shadow-lg border border-slate-600" title="Undo">
+                                                        <RotateCcw className="w-5 h-5 text-slate-300" />
+                                                    </button>
+                                                    <button onClick={redoLastAction} disabled={future.length === 0} className="absolute left-2 bottom-0 bg-slate-700 p-3 rounded-full disabled:opacity-30 hover:bg-slate-600 transition shadow-lg border border-slate-600" title="Redo">
+                                                        <RotateCw className="w-5 h-5 text-slate-300" />
+                                                    </button>
+                                                </>
+                                            )}
+
+                                            {/* キャンセル */}
+                                            {inputStep === 'qty' && (
+                                                <button onClick={resetStep} className="absolute right-2 bottom-0 bg-red-900/50 border border-red-500 text-red-200 p-3 rounded-full hover:bg-red-900" title="キャンセル">
+                                                    <X className="w-6 h-6" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        /* 手動モード */
+                                        <div>
+                                            {inputStep === 'code' ? (
+                                                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto custom-scrollbar">
+                                                    {Object.keys(masterData).map(c => (
+                                                        <button key={c} onClick={() => handleManualSelect(c)} className="p-3 rounded-lg text-sm font-mono bg-slate-700 active:bg-blue-600 text-white border border-slate-600 font-bold">
+                                                            {c}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                /* テンキー（山/個 別ボタン） */
+                                                <div className="bg-slate-800 p-3 rounded-lg">
+                                                    <div className="bg-black/50 p-3 rounded-lg mb-3 text-right text-3xl font-mono text-white h-14 flex items-center justify-end">
+                                                        {manualQty || "0"}
+                                                    </div>
+                                                    <div className="grid grid-cols-3 gap-2">
+                                                        {[7,8,9,4,5,6,1,2,3].map(n => (
+                                                            <button key={n} onClick={() => handleTenkeyInput(n)} className="bg-slate-700 p-4 rounded-lg text-xl font-bold hover:bg-slate-600 active:bg-slate-500">{n}</button>
+                                                        ))}
+                                                        <button onClick={() => handleTenkeyInput(0)} className="bg-slate-700 p-4 rounded-lg text-xl font-bold hover:bg-slate-600">0</button>
+                                                        <button onClick={() => handleTenkeyInput('.')} className="bg-slate-700 p-4 rounded-lg text-xl font-bold hover:bg-slate-600">.</button>
+                                                        <button onClick={handleTenkeyDelete} className="bg-red-900/50 text-red-200 p-4 rounded-lg flex items-center justify-center hover:bg-red-900"><Delete className="w-6 h-6" /></button>
+                                                    </div>
+                                                    {/* ★ 山/個 別々の確定ボタン */}
+                                                    <div className="grid grid-cols-2 gap-2 mt-3">
+                                                        <button onClick={handleTenkeyEnterPile} disabled={!manualQty} className="bg-blue-600 disabled:bg-slate-700 disabled:text-slate-500 text-white p-4 rounded-lg font-bold text-lg hover:bg-blue-500 active:bg-blue-400 flex items-center justify-center gap-2">
+                                                            <Layers className="w-5 h-5" />山で確定
+                                                        </button>
+                                                        <button onClick={handleTenkeyEnterPiece} disabled={!manualQty} className="bg-purple-600 disabled:bg-slate-700 disabled:text-slate-500 text-white p-4 rounded-lg font-bold text-lg hover:bg-purple-500 active:bg-purple-400 flex items-center justify-center gap-2">
+                                                            <Box className="w-5 h-5" />個で確定
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                    <button onClick={() => setManualMode(!manualMode)} className="text-xs text-slate-500 mt-4 underline">
+                                        {manualMode ? "音声入力に戻る" : "手動入力モード"}
+                                    </button>
+                                </div>
+
+                                {/* ★ 単位確認ダイアログ */}
+                                {showUnitDialog && (
+                                    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => { setShowUnitDialog(false); }}>
+                                        <div className="bg-slate-800 rounded-2xl p-6 w-full max-w-sm border-2 border-yellow-500 slide-up" onClick={e => e.stopPropagation()}>
+                                            <div className="text-center mb-4">
+                                                <AlertTriangle className="w-10 h-10 text-yellow-500 mx-auto mb-2" />
+                                                <h2 className="text-xl font-bold text-white">単位を選んでください</h2>
+                                                <p className="text-slate-400 mt-1">「{pendingRawText}」→ <span className="text-2xl font-bold text-white">{pendingQty}</span></p>
+                                            </div>
+                                            <div className="space-y-3">
+                                                <button onClick={() => handleUnitSelect('pile')} className="w-full bg-blue-600 text-white p-5 rounded-xl font-bold text-xl hover:bg-blue-500 active:bg-blue-400 flex items-center justify-center gap-3 shadow-lg">
+                                                    <Layers className="w-7 h-7" />
+                                                    <div>
+                                                        <div>{pendingQty} 山</div>
+                                                        <div className="text-sm font-normal opacity-80">= {pendingQty * (masterData[pendingCode]?.unitCount || 1)} 個</div>
+                                                    </div>
+                                                </button>
+                                                <button onClick={() => handleUnitSelect('piece')} className="w-full bg-purple-600 text-white p-5 rounded-xl font-bold text-xl hover:bg-purple-500 active:bg-purple-400 flex items-center justify-center gap-3 shadow-lg">
+                                                    <Box className="w-7 h-7" />
+                                                    <div>{pendingQty} 個</div>
+                                                </button>
+                                            </div>
+                                            <button onClick={() => { setShowUnitDialog(false); }} className="w-full mt-3 text-slate-500 p-3 rounded-lg text-sm hover:bg-slate-700">
+                                                キャンセル
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* 履歴 */}
+                                <div className="bg-slate-800 rounded-lg border border-slate-700 flex flex-col" style={{ maxHeight: '300px' }}>
+                                    <div className="p-3 border-b border-slate-700 flex justify-between items-center">
+                                        <span className="text-sm font-bold text-slate-400 flex items-center gap-1"><History className="w-4 h-4" />履歴 ({currentContextItems.length}件)</span>
+                                        <button onClick={clearAllData} className="text-xs text-red-400 border border-red-900 px-3 py-1 rounded-lg hover:bg-red-900/30">全消去</button>
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
+                                        {currentContextItems.slice().reverse().map(i => (
+                                            <div key={i.id} className={`p-3 rounded-lg flex justify-between items-center ${i.isPile ? 'bg-blue-900/20 border-l-4 border-blue-500' : 'bg-purple-900/20 border-l-4 border-purple-500'}`}>
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-slate-500 text-xs w-8 text-right">No.{i.seq}</span>
+                                                    <div>
+                                                        <div className="text-lg font-bold text-white font-mono">{i.code}</div>
+                                                        <div className="text-sm">
+                                                            <span className={i.isPile ? 'text-blue-400' : 'text-purple-400'}>
+                                                                {i.inputQty}{i.isPile ? '山' : '個'}
+                                                            </span>
+                                                            {i.isPile && <span className="text-slate-500 ml-1">×{i.unitSize} = <span className="text-white font-bold">{i.total}</span></span>}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[10px] text-slate-600">{i.timestamp}</span>
+                                                    <button onClick={() => removeItem(i.id)} className="text-slate-600 p-2 hover:text-red-400 rounded-lg hover:bg-slate-700">
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {currentContextItems.length === 0 && (
+                                            <div className="text-center text-slate-600 py-8">データなし</div>
+                                        )}
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        {/* 設定タブ */}
+                        {activeTab === 'settings' && (
+                            <div className="space-y-4">
+                                <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
+                                    <h2 className="text-base font-bold text-green-400 mb-3 flex items-center gap-2"><MapPin className="w-5 h-5" />エリア設定</h2>
+                                    <label className="block w-full bg-slate-700 text-center p-3 rounded-lg cursor-pointer text-sm text-slate-300 hover:bg-slate-600 mb-3 font-bold">
+                                        <Cloud className="w-4 h-4 inline mr-1" />CSVファイルから読込
+                                        <input type="file" accept=".csv" onChange={handleAreaUpload} className="hidden" />
+                                    </label>
+                                    <div className="bg-slate-900 p-3 rounded-lg max-h-32 overflow-y-auto text-sm text-slate-400 custom-scrollbar">
+                                        {areaList.map((n, idx) => <div key={n} className="py-1 border-b border-slate-800">{idx + 1}. {n}</div>)}
+                                    </div>
+                                </div>
+                                <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
+                                    <h2 className="text-base font-bold text-blue-400 mb-3 flex items-center gap-2"><Database className="w-5 h-5" />容器マスタ設定</h2>
+                                    <label className="block w-full bg-slate-700 text-center p-3 rounded-lg cursor-pointer text-sm text-slate-300 hover:bg-slate-600 mb-3 font-bold">
+                                        <Cloud className="w-4 h-4 inline mr-1" />CSVファイルから読込
+                                        <input type="file" accept=".csv" onChange={handleMasterUpload} className="hidden" />
+                                    </label>
+                                    <div className="bg-slate-900 p-3 rounded-lg max-h-40 overflow-y-auto text-sm text-slate-400 custom-scrollbar">
+                                        <div className="grid grid-cols-2 gap-1">
+                                            {Object.entries(masterData).map(([code, data]) => (
+                                                <div key={code} className="flex justify-between py-1 px-2 bg-slate-800/50 rounded">
+                                                    <span className="font-mono font-bold text-white">{code}</span>
+                                                    <span className="text-blue-400">{data.unitCount}段</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
+                                    <h2 className="text-base font-bold text-yellow-400 mb-2">使い方</h2>
+                                    <div className="text-sm text-slate-400 space-y-2">
+                                        <p>1. エリアを選択</p>
+                                        <p>2. マイクボタン長押し → 容器コードを話す</p>
+                                        <p>3. マイクボタン長押し → <span className="text-blue-400 font-bold">「20山」</span>or<span className="text-purple-400 font-bold">「10個」</span></p>
+                                        <p>4. 単位を言わなかった場合 → 確認画面が出ます</p>
+                                        <p className="text-yellow-400 font-bold mt-2">★ 「山」「個」を必ず言うと速く登録できます！</p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+    <script>
+        // Service Worker 登録 (PWA)
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('SW registered:', reg.scope))
+                    .catch(err => console.log('SW registration failed:', err));
+            });
+        }
+    </script>
+</body>
+</html>
