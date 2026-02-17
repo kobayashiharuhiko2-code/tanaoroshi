@@ -532,12 +532,12 @@
 
                                     {!manualMode ? (
                                         <div className="relative">
-                                            <button 
+                                            <button
                                                 onMouseDown={startListening} onMouseUp={stopListening}
                                                 onTouchStart={startListening} onTouchEnd={stopListening} onMouseLeave={stopListening}
                                                 className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto transition-all shadow-xl no-select ${
-                                                    isListening 
-                                                    ? 'bg-red-500 scale-105 ring-4 ring-red-500/30' 
+                                                    isListening
+                                                    ? 'bg-red-500 scale-105 ring-4 ring-red-500/30'
                                                     : inputStep === 'code'
                                                         ? 'bg-blue-600 ring-4 ring-blue-600/20 active:scale-95'
                                                         : 'bg-green-600 ring-4 ring-green-600/20 active:scale-95'
@@ -545,8 +545,8 @@
                                             >
                                                 <Mic className="w-10 h-10 text-white"/>
                                             </button>
-                                            
-                                            {/* Undo / Redo */}
+
+                                            {/* Undo / Redo (コードステップのみ) */}
                                             {inputStep === 'code' && (
                                                 <>
                                                     <button onClick={undoLastAction} disabled={history.length===0} className="absolute right-4 bottom-0 bg-slate-700 p-3 rounded-full disabled:opacity-30 hover:bg-slate-600 transition shadow-lg border border-slate-600" title="ひとつ戻る(Undo)">
@@ -558,35 +558,10 @@
                                                 </>
                                             )}
 
-                                            {/* 数量入力時のハイブリッドUI（テンキー表示） */}
+                                            {/* 数量ステップ: キャンセルボタン */}
                                             {inputStep === 'qty' && (
-                                                <div className="absolute inset-0 bg-slate-900/90 z-10 flex flex-col justify-end p-2 rounded-2xl">
-                                                    <div className="flex justify-between items-center mb-2 px-2">
-                                                        <span className="text-xs text-slate-400">音声またはテンキーで入力</span>
-                                                        <button onClick={resetStep} className="bg-red-900/50 text-red-200 px-3 py-1 rounded text-xs border border-red-500">キャンセル</button>
-                                                    </div>
-                                                    <div className="bg-black/50 p-2 rounded mb-2 text-right text-2xl font-mono text-white h-12 flex items-center justify-end border border-green-500/50">
-                                                        {manualQty || transcript || "0"}
-                                                    </div>
-                                                    <div className="grid grid-cols-3 gap-2">
-                                                        {[7,8,9,4,5,6,1,2,3].map(n=>(
-                                                            <button key={n} onClick={()=>handleTenkeyInput(n)} className="bg-slate-700 p-3 rounded text-xl font-bold hover:bg-slate-600 active:bg-slate-500">{n}</button>
-                                                        ))}
-                                                        <button onClick={handleTenkeyDelete} className="bg-slate-700 p-3 rounded flex items-center justify-center hover:bg-slate-600"><Delete className="w-6 h-6"/></button>
-                                                        <button onClick={()=>handleTenkeyInput(0)} className="bg-slate-700 p-3 rounded text-xl font-bold hover:bg-slate-600">0</button>
-                                                        <button onClick={()=>handleTenkeyInput('.')} className="bg-slate-700 p-3 rounded text-xl font-bold hover:bg-slate-600">.</button>
-                                                    </div>
-                                                    <div className="flex gap-2 mt-2">
-                                                        {/* 音声ボタンも残す */}
-                                                        <button 
-                                                            onMouseDown={startListening} onMouseUp={stopListening}
-                                                            onTouchStart={startListening} onTouchEnd={stopListening}
-                                                            className={`flex-1 p-3 rounded font-bold flex items-center justify-center gap-2 ${isListening ? 'bg-red-500' : 'bg-blue-600'}`}
-                                                        >
-                                                            <Mic className="w-5 h-5"/> {isListening ? '認識中' : '声で入力'}
-                                                        </button>
-                                                        <button onClick={handleTenkeyEnter} className="flex-1 bg-green-600 text-white p-3 rounded font-bold hover:bg-green-500 active:bg-green-400">確定</button>
-                                                    </div>
+                                                <div className="mt-3 flex justify-center">
+                                                    <button onClick={resetStep} className="bg-red-900/50 text-red-200 px-4 py-2 rounded text-sm border border-red-500">キャンセル</button>
                                                 </div>
                                             )}
                                         </div>
