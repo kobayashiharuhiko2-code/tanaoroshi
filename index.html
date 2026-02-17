@@ -9,7 +9,7 @@
     <meta name="theme-color" content="#1e40af">
     <link rel="manifest" href="./manifest.json">
     <link rel="apple-touch-icon" href="./icons/icon-192.png">
-    <title>清和産業 スマート棚卸 v30</title>
+    <title>清和産業 スマート棚卸 v31</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -106,6 +106,21 @@
             let s = text.replace(/[０-９]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0));
             s = s.replace(/．/g, '.');
 
+            // ★ 日本語の数詞を先に処理（「にじゅういち」→「21」等）
+            // ひらがな→カタカナ統一
+            let kana = s.replace(/[\u3041-\u3096]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 0x60));
+
+            // カタカナ数詞パターンで一括変換（「ニジュウイチ」→「21」等）
+            kana = kana.replace(/(ニジュウ|ニジュー|にじゅう)(イチ|ニ|サン|ヨン|シ|ゴ|ロク|ナナ|シチ|ハチ|キュウ|ク)?/g, (_, tens, ones) => {
+                const onesMap = {'イチ':1,'ニ':2,'サン':3,'ヨン':4,'シ':4,'ゴ':5,'ロク':6,'ナナ':7,'シチ':7,'ハチ':8,'キュウ':9,'ク':9};
+                return String(20 + (ones ? (onesMap[ones] || 0) : 0));
+            });
+            kana = kana.replace(/(ジュウ|ジュー|じゅう)(イチ|ニ|サン|ヨン|シ|ゴ|ロク|ナナ|シチ|ハチ|キュウ|ク)?/g, (_, tens, ones) => {
+                const onesMap = {'イチ':1,'ニ':2,'サン':3,'ヨン':4,'シ':4,'ゴ':5,'ロク':6,'ナナ':7,'シチ':7,'ハチ':8,'キュウ':9,'ク':9};
+                return String(10 + (ones ? (onesMap[ones] || 0) : 0));
+            });
+            s = kana;
+
             // 漢数字→アラビア数字
             const kanjiMap = { '一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,'十':10,'零':0 };
             // 「二十四」→「24」のような変換
@@ -116,15 +131,18 @@
             });
             Object.keys(kanjiMap).forEach(k => { s = s.replace(new RegExp(k, 'g'), kanjiMap[k]); });
 
-            // カタカナ読み→数字
+            // 残りのカタカナ読み→数字（十の位の処理後に残った単独カタカナ）
             const kataMap = {'イチ':'1','ニ':'2','サン':'3','ヨン':'4','シ':'4','ゴ':'5','ロク':'6','ナナ':'7','シチ':'7','ハチ':'8','キュウ':'9','ク':'9','ジュウ':'10','ゼロ':'0','マル':'0'};
-            // 長い順にマッチさせる
             Object.keys(kataMap).sort((a,b) => b.length - a.length).forEach(k => {
                 s = s.replace(new RegExp(k, 'g'), kataMap[k]);
             });
 
             // 「テン」「ポイント」→「.」
             s = s.replace(/テン|てん|ポイント|ぽいんと/g, '.');
+
+            // ★ 連続する数字の間にスペースがあれば除去しない（「20 1」問題対策）
+            // ただし「20」+「1」のように分離した場合は最初の数値だけ使う
+            // → 数字の抽出時に最大の合理的な数値を選ぶ
 
             // 山パターンチェック
             for (const pat of PILE_PATTERNS) {
@@ -138,33 +156,73 @@
                 if (m) return { qty: parseFloat(m[1]), unit: 'piece', raw: text };
             }
 
-            // 単位なし：数字だけ抽出
+            // ★ 単位なし：数字抽出（改良版）
+            // 「201」のような不自然に大きい数字は分割を試みる
             const numMatch = s.match(/(\d+\.?\d*)/);
             if (numMatch) {
-                return { qty: parseFloat(numMatch[1]), unit: null, raw: text };
+                let qty = parseFloat(numMatch[1]);
+                // 100以上の場合、「20」+「1」→「201」の可能性をチェック
+                if (qty >= 100 && Number.isInteger(qty)) {
+                    const numStr = numMatch[1];
+                    // 元テキストにスペースや区切りがあるか確認
+                    const origNums = text.match(/\d+/g);
+                    if (origNums && origNums.length >= 2) {
+                        // 複数の数字が元テキストにあった → 最初の数字を採用
+                        qty = parseFloat(origNums[0]);
+                    }
+                }
+                return { qty, unit: null, raw: text };
             }
 
             return { qty: null, unit: null, raw: text };
         }
 
         // ===== 容器コード認識の強化 =====
+        // カタカナを正規化（全角カタカナ統一、スペース除去、小文字→大文字相当）
+        function normalizeKana(text) {
+            let s = text;
+            // ひらがな→カタカナ
+            s = s.replace(/[\u3041-\u3096]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 0x60));
+            // 半角カタカナ→全角カタカナ (簡易)
+            const hwMap = {'ｱ':'ア','ｲ':'イ','ｳ':'ウ','ｴ':'エ','ｵ':'オ','ｶ':'カ','ｷ':'キ','ｸ':'ク','ｹ':'ケ','ｺ':'コ',
+                'ｻ':'サ','ｼ':'シ','ｽ':'ス','ｾ':'セ','ｿ':'ソ','ﾀ':'タ','ﾁ':'チ','ﾂ':'ツ','ﾃ':'テ','ﾄ':'ト',
+                'ﾅ':'ナ','ﾆ':'ニ','ﾇ':'ヌ','ﾈ':'ネ','ﾉ':'ノ','ﾊ':'ハ','ﾋ':'ヒ','ﾌ':'フ','ﾍ':'ヘ','ﾎ':'ホ',
+                'ﾏ':'マ','ﾐ':'ミ','ﾑ':'ム','ﾒ':'メ','ﾓ':'モ','ﾔ':'ヤ','ﾕ':'ユ','ﾖ':'ヨ',
+                'ﾗ':'ラ','ﾘ':'リ','ﾙ':'ル','ﾚ':'レ','ﾛ':'ロ','ﾜ':'ワ','ﾝ':'ン','ﾞ':'゛','ﾟ':'゜',
+                'ｰ':'ー','ﾌﾞ':'ブ','ﾞ':'゛'};
+            Object.keys(hwMap).sort((a,b) => b.length - a.length).forEach(k => {
+                s = s.replace(new RegExp(k, 'g'), hwMap[k]);
+            });
+            // スペース・記号除去
+            return s.replace(/[\s\u3000・、。,.　]/g, '');
+        }
+
         function normalizeForCode(text) {
             let s = text;
             // 全角→半角
             s = s.replace(/[Ａ-Ｚａ-ｚ０-９]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0));
 
-            // カタカナ読み→アルファベット / 数字
+            // カタカナ読み→アルファベット / 数字（長い順にマッチ）
             const codeMap = {
+                'ダブリューエー':'WA', 'ダブリュービー':'WB', 'ダブリューエム':'WM', 'ダブリューエヌ':'WN',
+                'ダブルエー':'WA', 'ダブルビー':'WB', 'ダブルエム':'WM', 'ダブルエヌ':'WN',
                 'アールブイ':'RV', 'アールヴイ':'RV', 'アール':'R',
+                'トゥエンティーファイブ':'25', 'トゥエンティファイブ':'25',
+                'ニジュウゴ':'25', 'にじゅうご':'25',
+                'エックス':'X',
                 'ブイ':'V', 'ヴイ':'V', 'ビー':'B',
                 'エイチ':'H', 'エッチ':'H',
-                'ティー':'T', 'ピー':'P', 'エム':'M', 'エル':'L', 'ケー':'K',
-                'ワイ':'Y', 'ダブリュー':'W', 'ゼット':'Z', 'ジェイ':'J',
+                'ティー':'T', 'テー':'T', 'ピー':'P', 'エム':'M', 'エル':'L', 'ケー':'K',
+                'ワイ':'Y', 'ダブリュー':'W', 'ダブル':'W', 'ゼット':'Z', 'ジェイ':'J', 'ジェー':'J',
                 'ユー':'U', 'エフ':'F', 'オー':'O', 'キュー':'Q',
                 'エス':'S', 'ジー':'G', 'シー':'C', 'ディー':'D',
-                'イー':'E', 'エックス':'X', 'アイ':'I', 'エヌ':'N', 'エー':'A',
+                'イー':'E', 'アイ':'I', 'エヌ':'N', 'エー':'A',
+                // 英語読み数字
+                'ナイン':'9', 'エイト':'8', 'セブン':'7', 'シックス':'6', 'ファイブ':'5',
+                'フォー':'4', 'スリー':'3', 'ツー':'2', 'ワン':'1', 'ゼロ':'0',
+                // 日本語読み数字
                 'ハチ':'8', 'ナナ':'7', 'ロク':'6', 'ゴ':'5', 'ヨン':'4',
-                'サン':'3', 'ニ':'2', 'イチ':'1', 'ゼロ':'0', 'キュウ':'9',
+                'サン':'3', 'ニ':'2', 'イチ':'1', 'キュウ':'9', 'ク':'9',
             };
             // 長い順にマッチ
             Object.keys(codeMap).sort((a,b) => b.length - a.length).forEach(k => {
@@ -178,40 +236,74 @@
             if (!text || text.trim() === '') return null;
 
             const target = normalizeForCode(text);
+            const targetKana = normalizeKana(text);
             const masterKeys = Object.keys(masterData).filter(k => k && k.trim().length > 0);
 
-            // 完全一致
+            // ★ 優先1: エイリアス（カタカナ）完全一致 — 最も確実
+            for (const key of masterKeys) {
+                const aliases = masterData[key].aliases || [];
+                for (const alias of aliases) {
+                    if (!alias || alias.trim() === '') continue;
+                    const normAlias = normalizeKana(alias);
+                    // カタカナ同士で直接比較（最も確実）
+                    if (normAlias && normAlias === targetKana) return key;
+                    // 音声テキストにエイリアスが含まれている
+                    if (alias.length >= 3 && text.includes(alias)) return key;
+                }
+            }
+
+            // ★ 優先2: エイリアスをnormalizeForCodeで英数字化して比較
+            for (const key of masterKeys) {
+                const aliases = masterData[key].aliases || [];
+                for (const alias of aliases) {
+                    if (!alias || alias.trim() === '') continue;
+                    const normAlias = normalizeForCode(alias);
+                    if (normAlias && normAlias === target) return key;
+                }
+            }
+
+            // 優先3: コード名完全一致
             for (const key of masterKeys) {
                 const pKey = key.toUpperCase().replace(/[^A-Z0-9]/g, '');
                 if (pKey === target) return key;
             }
 
-            // R省略対応 (例: "V8" → "RV8")
+            // 優先4: R省略対応 (例: "V8" → "RV8")
             for (const key of masterKeys) {
                 const pKey = key.toUpperCase().replace(/[^A-Z0-9]/g, '');
                 if (pKey.startsWith('R') && pKey.substring(1) === target) return key;
             }
 
-            // エイリアスチェック
-            for (const key of masterKeys) {
-                const aliases = masterData[key].aliases || [];
-                for (const alias of aliases) {
-                    const normAlias = normalizeForCode(alias);
-                    if (normAlias === target) return key;
-                    if (text.includes(alias)) return key;
-                }
-            }
-
-            // 部分一致（最低2文字以上）
+            // 優先5: 部分一致（厳格化 — 完全包含のみ、最短でも2文字）
             if (target.length >= 2) {
+                let bestMatch = null;
+                let bestLen = 0;
                 for (const key of masterKeys) {
                     const pKey = key.toUpperCase().replace(/[^A-Z0-9]/g, '');
-                    if (pKey.includes(target) || target.includes(pKey)) return key;
+                    // targetがpKeyと完全一致（既にチェック済みだがR付きも）
+                    if (pKey === target || pKey === 'R' + target) {
+                        return key;
+                    }
+                    // R除去版で完全一致
                     if (pKey.startsWith('R')) {
                         const noR = pKey.substring(1);
-                        if (noR.length > 0 && (noR.includes(target) || target.includes(noR))) return key;
+                        if (noR === target) return key;
+                    }
+                    // ★ 部分一致は「targetがpKeyを完全に含む」場合のみ（逆は危険）
+                    // かつ最長一致を採用
+                    if (pKey.length >= 2 && target.includes(pKey) && pKey.length > bestLen) {
+                        bestMatch = key;
+                        bestLen = pKey.length;
+                    }
+                    if (pKey.startsWith('R')) {
+                        const noR = pKey.substring(1);
+                        if (noR.length >= 2 && target.includes(noR) && noR.length > bestLen) {
+                            bestMatch = key;
+                            bestLen = noR.length;
+                        }
                     }
                 }
+                if (bestMatch) return bestMatch;
             }
 
             return null;
@@ -256,9 +348,9 @@
             // localStorage読み込み
             useEffect(() => {
                 try {
-                    const savedMaster = localStorage.getItem('inventory_masterData_v30');
-                    const savedAreaList = localStorage.getItem('inventory_areaList_v30');
-                    const savedItems = localStorage.getItem('inventory_items_v30');
+                    const savedMaster = localStorage.getItem('inventory_masterData_v31');
+                    const savedAreaList = localStorage.getItem('inventory_areaList_v31');
+                    const savedItems = localStorage.getItem('inventory_items_v31');
                     if (savedMaster) setMasterData(JSON.parse(savedMaster));
                     if (savedAreaList) {
                         const parsed = JSON.parse(savedAreaList);
@@ -269,9 +361,9 @@
                 } catch (e) { console.error(e); } finally { setIsLoaded(true); }
             }, []);
 
-            useEffect(() => { if (isLoaded) localStorage.setItem('inventory_masterData_v30', JSON.stringify(masterData)); }, [masterData, isLoaded]);
-            useEffect(() => { if (isLoaded) localStorage.setItem('inventory_areaList_v30', JSON.stringify(areaList)); }, [areaList, isLoaded]);
-            useEffect(() => { if (isLoaded) localStorage.setItem('inventory_items_v30', JSON.stringify(items)); }, [items, isLoaded]);
+            useEffect(() => { if (isLoaded) localStorage.setItem('inventory_masterData_v31', JSON.stringify(masterData)); }, [masterData, isLoaded]);
+            useEffect(() => { if (isLoaded) localStorage.setItem('inventory_areaList_v31', JSON.stringify(areaList)); }, [areaList, isLoaded]);
+            useEffect(() => { if (isLoaded) localStorage.setItem('inventory_items_v31', JSON.stringify(items)); }, [items, isLoaded]);
 
             // Web Speech API 初期化
             useEffect(() => {
@@ -685,7 +777,7 @@
                 <div className="pb-24 max-w-md mx-auto min-h-screen bg-slate-900">
                     {/* ヘッダー */}
                     <div className="bg-slate-800 p-3 shadow-md sticky top-0 z-20 border-b border-slate-700 flex justify-between items-center">
-                        <h1 className="text-base font-bold text-blue-400">棚卸 v30</h1>
+                        <h1 className="text-base font-bold text-blue-400">棚卸 v31</h1>
                         <div className="bg-slate-700 rounded-lg flex">
                             <button onClick={() => setActiveTab('input')} className={`px-4 py-2 text-sm rounded-lg font-bold ${activeTab === 'input' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}>入力</button>
                             <button onClick={() => setActiveTab('settings')} className={`px-4 py-2 text-sm rounded-lg font-bold ${activeTab === 'settings' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}>設定</button>
