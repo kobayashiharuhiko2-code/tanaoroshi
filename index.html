@@ -249,6 +249,7 @@
             const [pendingRawText, setPendingRawText] = useState('');
 
             const transcriptRef = useRef('');
+            const alternativesRef = useRef([]);  // ★ 全候補を保存
             const recognitionRef = useRef(null);
             const isListeningRef = useRef(false);
 
@@ -284,9 +285,17 @@
                     rec.onresult = (event) => {
                         let final = '';
                         let interim = '';
+                        const alts = [];  // ★ 全候補を収集
                         for (let i = event.resultIndex; i < event.results.length; ++i) {
                             if (event.results[i].isFinal) {
                                 final += event.results[i][0].transcript;
+                                // ★ 全候補（最大3つ）を収集
+                                for (let j = 0; j < event.results[i].length; j++) {
+                                    alts.push({
+                                        text: event.results[i][j].transcript,
+                                        confidence: event.results[i][j].confidence
+                                    });
+                                }
                             } else {
                                 interim += event.results[i][0].transcript;
                             }
@@ -294,6 +303,7 @@
                         const resultText = final || interim;
                         setTranscript(resultText);
                         transcriptRef.current = resultText;
+                        if (alts.length > 0) alternativesRef.current = alts;
                     };
                     rec.onerror = (e) => {
                         console.error('Speech error:', e.error);
@@ -308,10 +318,11 @@
                             setIsListening(false);
                             isListeningRef.current = false;
                             const finalText = transcriptRef.current;
+                            const alts = [...alternativesRef.current];  // ★ 候補コピー
+                            alternativesRef.current = [];
                             if (finalText) {
-                                // inputStep をrefで取得するため、直接参照
                                 setTimeout(() => {
-                                    processVoiceResult(finalText);
+                                    processVoiceResult(finalText, alts);
                                 }, 100);
                             }
                         }
@@ -326,11 +337,11 @@
             const pendingCodeRef = useRef(null);
             useEffect(() => { pendingCodeRef.current = pendingCode; }, [pendingCode]);
 
-            const processVoiceResult = useCallback((text) => {
+            const processVoiceResult = useCallback((text, alternatives = []) => {
                 if (inputStepRef.current === 'code') {
-                    parseCodeInput(text);
+                    parseCodeInput(text, alternatives);
                 } else {
-                    parseQtyInput(text);
+                    parseQtyInput(text, alternatives);
                 }
             }, []);
 
@@ -360,17 +371,36 @@
 
             const getCurrentSeq = () => items.filter(i => i.area === currentArea).length + 1;
 
-            // ===== コード認識 =====
-            const parseCodeInput = (text) => {
+            // ===== コード認識（★ 複数候補活用） =====
+            const parseCodeInput = (text, alternatives = []) => {
                 if (!text || text.trim() === '') return;
-                setDebugText(`認識: "${text}"`);
 
-                const code = findContainerCode(text, masterData);
+                // ★ 候補一覧をデバッグ表示
+                const altTexts = alternatives.map((a, i) => `${i+1}:"${a.text}"(${Math.round((a.confidence||0)*100)}%)`).join(' ');
+                setDebugText(`候補: ${altTexts || `"${text}"`}`);
+
+                // ★ 1番目の候補でまず試す
+                let code = findContainerCode(text, masterData);
+                let matchedText = text;
+
+                // ★ 1番目で見つからなければ、2番目・3番目の候補も試す
+                if (!code && alternatives.length > 1) {
+                    for (let i = 1; i < alternatives.length; i++) {
+                        const altCode = findContainerCode(alternatives[i].text, masterData);
+                        if (altCode) {
+                            code = altCode;
+                            matchedText = alternatives[i].text;
+                            break;
+                        }
+                    }
+                }
+
                 if (code) {
                     setPendingCode(code);
                     setInputStep('qty');
                     setFeedbackType('info');
-                    setFeedbackMessage(`✓ ${code} → 次に数量を話してください`);
+                    const hint = matchedText !== text ? ` (候補${alternatives.findIndex(a=>a.text===matchedText)+1}で一致)` : '';
+                    setFeedbackMessage(`✓ ${code}${hint} → 次に数量を話してください`);
                     soundEffect.playStep();
                 } else {
                     setFeedbackType('error');
@@ -380,12 +410,46 @@
                 setTranscript('');
             };
 
-            // ===== 数量認識（山/個 自動判定 + 確認ダイアログ） =====
-            const parseQtyInput = (text) => {
+            // ===== 数量認識（★ 複数候補活用 + 山/個 自動判定 + 確認ダイアログ） =====
+            const parseQtyInput = (text, alternatives = []) => {
                 if (!text || text.trim() === '') return;
-                setDebugText(`数量認識: "${text}"`);
 
-                const result = extractQtyAndUnit(text);
+                // ★ 候補一覧をデバッグ表示
+                const altTexts = alternatives.map((a, i) => `${i+1}:"${a.text}"(${Math.round((a.confidence||0)*100)}%)`).join(' ');
+                setDebugText(`数量候補: ${altTexts || `"${text}"`}`);
+
+                // ★ まず1番目で試す
+                let result = extractQtyAndUnit(text);
+                let usedText = text;
+
+                // ★ 1番目で単位不明 or 数量不明の場合、他の候補も試す
+                if (alternatives.length > 1) {
+                    // 数量が取れなかった場合: 他候補から数量を探す
+                    if (result.qty === null || result.qty <= 0) {
+                        for (let i = 1; i < alternatives.length; i++) {
+                            const altResult = extractQtyAndUnit(alternatives[i].text);
+                            if (altResult.qty !== null && altResult.qty > 0) {
+                                result = altResult;
+                                usedText = alternatives[i].text;
+                                break;
+                            }
+                        }
+                    }
+                    // 数量はあるが単位不明の場合: 他候補から単位を探す
+                    else if (result.unit === null) {
+                        for (let i = 1; i < alternatives.length; i++) {
+                            const altResult = extractQtyAndUnit(alternatives[i].text);
+                            if (altResult.qty !== null && altResult.qty > 0 && altResult.unit !== null) {
+                                // 数量が同じ候補で単位が判明 → そちらを採用
+                                if (altResult.qty === result.qty) {
+                                    result = altResult;
+                                    usedText = alternatives[i].text;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
 
                 if (result.qty === null || result.qty <= 0) {
                     setFeedbackType('error');
@@ -397,10 +461,10 @@
 
                 if (result.unit === 'pile') {
                     // 「山」が明確 → 即登録
-                    registerItem(result.qty, true, text);
+                    registerItem(result.qty, true, usedText);
                 } else if (result.unit === 'piece') {
                     // 「個」が明確 → 即登録
-                    registerItem(result.qty, false, text);
+                    registerItem(result.qty, false, usedText);
                 } else {
                     // ★ 単位不明 → 確認ダイアログ
                     setPendingQty(result.qty);
