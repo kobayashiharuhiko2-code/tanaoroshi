@@ -60,7 +60,8 @@
         function App() {
             const [activeTab, setActiveTab] = useState('input');
             const [items, setItems] = useState([]);
-            const [redoStack, setRedoStack] = useState([]);
+            const [history, setHistory] = useState([]);
+            const [future, setFuture] = useState([]);
             const [masterData, setMasterData] = useState({'RV8': { unitCount: 20, aliases: [] }, 'R7H': { unitCount: 16, aliases: [] }, 'TP3': { unitCount: 10, aliases: [] }});
             const [areaList, setAreaList] = useState(['エリア1', 'エリア2']);
             const [currentArea, setCurrentArea] = useState('エリア1'); 
